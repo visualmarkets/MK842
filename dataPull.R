@@ -11,7 +11,7 @@ library(skimr)
 
 # Execution Plan
 registerDoFuture()
-plan(multisession, workers = 3L)
+plan(multisession, workers = availableCores() - 1)
 
 # Source Data Schema
 source("schema.R")
@@ -19,7 +19,7 @@ source("schema.R")
 # Read in Data with Schema
 rawData <- 
   read_csv(
-    file = "US_Accidents_May19.csv.zip", 
+    file = "US_Accidents_Dec19.csv", 
     col_types = dataSchema) %>% 
   janitor::clean_names(case = "snake") %>% 
   as.data.table() # Convert to Data.Table
@@ -52,8 +52,10 @@ testData  <- rawData[-partition,]
 preProcessModel <- 
   preProcess(
     trainData, 
-    method = c("zv", "center", "scale")
+    method = c("zv", "YeoJohnson")
   )
+
+trainData <- predict(preProcessModel, trainData)
 
 # Select Dummy Vars
 dummyVars <- ~ weather_condition + side + state + roundabout + railway + amenity + give_way + day_of_week + junction + bump + turning_loop + traffic_signal + traffic_calming + sunrise_sunset +  wind_direction + crossing + no_exit + stop
@@ -67,25 +69,24 @@ dummyVars <- formula.tools::get.vars(dummyVars) # Transform from model spec into
 # Add in Dummy Variables and get rid of old variables
 trainData <- cbind(trainData, dummyData)[,.SD, .SDcols = -c(dummyVars, "distance_mi", "start_time", "end_time", "zipcode", "end_hour", "station")]
 
-# trainClean <- DMwR::SMOTE(severity ~ ., data  = trainData) # Run SMOTE to rebalance the classes between "High" and "Low" 
-trainClean <- caret::downSample(y = trainData$severity, x = trainData[,.SD, .SDcols = -c("severity")])
+trainClean <- DMwR::SMOTE(severity ~ ., data  = trainData[1:100000,]) # Run SMOTE to rebalance the classes between "High" and "Low" 
+# trainData <- downSample(y = trainData$severity, x = trainData[,.SD, .SDcols = -c("severity")], list = FALSE, yname = "severity")
 
 #  Make Test Dummy Vars
+testData  <- predict(preProcessModel, testData)  # Apply cleaning model from training set to test set
 testDummy <- predict(dummyModel, testData)
-testClean <- predict(preProcessModel, testData)  # Apply cleaning model from training set to test set
 testData  <- cbind(testData, testDummy)[,.SD, .SDcols = -c(dummyVars, "distance_mi", "start_time", "end_time", "zipcode", "end_hour", "station")] # Bind dummy variables and remove originals
 
-
 # View Missings
-vizSample    <- sample(1:nrow(trainData), size = 5000)
-visMiss      <- vis_miss(trainData[vizSample,])     # Create Viz of missing data
-visMissClean <- vis_miss(trainClean[vizSample,])
-ggMissUpset  <- gg_miss_upset(trainData[vizSample,]) # Create viz of missing data relationships
+# vizSample    <- sample(1:nrow(trainData), size = 5000)
+# visMiss      <- vis_miss(trainData[vizSample,])     # Create Viz of missing data
+# visMissClean <- vis_miss(trainClean[vizSample,])
+# ggMissUpset  <- gg_miss_upset(trainData[vizSample,]) # Create viz of missing data relationships
 
 # View Results #
-dataViewRaw         <- skimr::skim(trainData)          # View summary of raw data
-dataViewClean       <- skimr::skim(trainClean)         # View summary of centered and scaled data
-dataViewCleanNaOmit <- skimr::skim(na.omit(trainData)) # View summary of totally cleaned data
+# dataViewRaw         <- skimr::skim(trainData)          # View summary of raw data
+# dataViewClean       <- skimr::skim(trainClean)         # View summary of centered and scaled data
+# dataViewCleanNaOmit <- skimr::skim(na.omit(trainData)) # View summary of totally cleaned data
 
 # Save clean data to file for others
 saveRDS(
@@ -93,8 +94,8 @@ saveRDS(
     list(
       data = list(
         rawData    = rawData,
-        trainClean = trainClean,
-        testClean  = testClean
+        trainClean = trainData,
+        testClean  = testData
       )
     ),
   file = "cleanData.Rds"

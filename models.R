@@ -8,11 +8,12 @@ library(caretEnsemble)
 
 # Execution Plan
 registerDoFuture()
-plan(multisession, workers = 1) # availableCores() - 1)
+plan(multiprocess, workers = availableCores() - 1) # availableCores() - 1)
 
 # Read in Data
 # Training data
 trainClean <- readRDS("cleanData.Rds")[["data"]][['trainClean']]
+trainClean <- as.data.table(trainClean)
 trainClean <- na.omit(trainClean) # Final sanatize before models
 
 # Try ensemble
@@ -26,33 +27,44 @@ testClean <- na.omit(testClean) # Final sanatize before models
 # Establish training control variables
 trControl <- trainControl(method = "cv",
                           # sampling = "down",
-                          number = 1,
+                          # number = 1,
                           savePredictions = "final",
                           summaryFunction = twoClassSummary,
                           index = createResample(trainClean$severity, 3),
                           classProbs = TRUE)
 
 # Turn tuning off for now
-tuneLength <- 1
+# tuneLength <- 1
 
 # Different Individual training models
-xgBoostModel <- 
+xgBoostModel <-
   train(
     x = trainClean[,.SD, .SDcols = -"severity"],
     y = trainClean$severity,
     method = "xgbTree",
     metric = "ROC",
-    tuneLength = tuneLength, 
-    trControl = trControl   
-  )  
+    # tuneLength = tuneLength,
+    trControl = trControl
+  )
 
 rfModel <-
+
   train(
     x = trainClean[,.SD, .SDcols = -"severity"],
     y = trainClean$severity,
     method = "rf",
     metric = "Kappa",
-    tuneLength = tuneLength,
+    # tuneLength = tuneLength,
+    trControl = trControl
+  )
+
+rangerModel <-
+  train(
+    x = trainClean[,.SD, .SDcols = -"severity"],
+    y = trainClean$severity,
+    method = "range",
+    metric = "ROC",
+    # tuneLength = tuneLength,
     trControl = trControl
   )
 
@@ -63,7 +75,7 @@ c5Model <-
     method = "C5.0",
     metric = "ROC",
     tuneLength = tuneLength,
-    trControl = trControl   
+    trControl = trControl
   )
 
 nnetModel <-
@@ -73,7 +85,7 @@ nnetModel <-
     method = "nnet",
     metric = "Kappa",
     tuneLength = tuneLength,
-    trControl = trControl   
+    trControl = trControl
   )
 
 rpartModel <-
@@ -83,7 +95,7 @@ rpartModel <-
     method = "rpart",
     metric = "Kappa",
     tuneLength = tuneLength,
-    trControl = trControl   
+    trControl = trControl
   )
 
 glmModel <-
@@ -91,12 +103,21 @@ glmModel <-
     x = trainClean[,.SD, .SDcols = -"severity"],
     y = trainClean$severity,
     method = "glm",
-    metric = "Kappa",
+    metric = "ROC",
     tuneLength = tuneLength,
     trControl = trControl
   )
 
-knnModel <- 
+glmNetModel <-
+  train(
+    x = trainClean[,.SD, .SDcols = -"severity"],
+    y = trainClean$severity,
+    method = "glmnet",
+    metric = "ROC",
+    trControl = trControl
+  )
+
+knnModel <-
   train(
     x = trainClean[,.SD, .SDcols = -"severity"],
     y = trainClean$severity,
@@ -107,11 +128,11 @@ knnModel <-
   )
 
 # Prediction and confusion matrix
-testCases <- predict(c5Model, testClean)
+testCases <- predict(xgBoostModel, testClean)
 confusionMatrix(testCases, testClean$severity)
 
 # Caret Ensemble Stack
-modelList <- 
+modelList <-
   caretList(
     x = trainClean[,.SD, .SDcols = -"severity"],
     y = trainClean$severity,
@@ -122,9 +143,9 @@ modelList <-
   )
 
 # Construct Ensemble Stack
-greedyEnsemble <- 
+greedyEnsemble <-
   caretEnsemble(
-    modelList, 
+    modelList,
     metric = "Kappa",
     trControl = trainControl(
       number          = 4,
@@ -137,9 +158,9 @@ greedyEnsemble <-
   )
 
 # Construct Model Stack
-greedyStack <- 
+greedyStack <-
   caretStack(
-    modelList, 
+    modelList,
     metric = "Kappa",
     trControl = trainControl(
       number          = 4,
@@ -151,7 +172,7 @@ greedyStack <-
     )
   )
 
-# Summaries 
+# Summaries
 summary(greedyEnsemble)
 summary(greedyStack)
 
