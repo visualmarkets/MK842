@@ -10,19 +10,19 @@ library(caretEnsemble)
 registerDoFuture()
 plan(multiprocess, workers = availableCores() - 1) # availableCores() - 1)
 
-# Read in Data
+#-----------#
+# Read Data #
+#-----------#
+
 # Training data
 trainClean <- readRDS("cleanData.Rds")[["data"]][['trainClean']]
-trainClean <- as.data.table(trainClean)
-trainClean <- na.omit(trainClean) # Final sanatize before models
-
-# Try ensemble
-# sampleData <- sample(1:nrow(trainClean), size = 250000)
-# trainClean <- trainClean[sampleData,]
 
 # Testing data
 testClean <- readRDS("cleanData.Rds")[["data"]][['testClean']]
-testClean <- na.omit(testClean) # Final sanatize before models
+
+#-------------------------#
+# Specify Training Params #
+#-------------------------#
 
 # Establish training control variables
 trControl <- trainControl(method = "cv",
@@ -33,8 +33,9 @@ trControl <- trainControl(method = "cv",
                           index = createResample(trainClean$severity, 3),
                           classProbs = TRUE)
 
-# Turn tuning off for now
-# tuneLength <- 1
+#--------------#
+# Caret Models #
+#--------------#
 
 # Different Individual training models
 xgBoostModel <-
@@ -48,13 +49,11 @@ xgBoostModel <-
   )
 
 rfModel <-
-
   train(
     x = trainClean[,.SD, .SDcols = -"severity"],
     y = trainClean$severity,
     method = "rf",
     metric = "Kappa",
-    # tuneLength = tuneLength,
     trControl = trControl
   )
 
@@ -64,7 +63,6 @@ rangerModel <-
     y = trainClean$severity,
     method = "range",
     metric = "ROC",
-    # tuneLength = tuneLength,
     trControl = trControl
   )
 
@@ -74,7 +72,6 @@ c5Model <-
     y = trainClean$severity,
     method = "C5.0",
     metric = "ROC",
-    tuneLength = tuneLength,
     trControl = trControl
   )
 
@@ -84,7 +81,6 @@ nnetModel <-
     y = trainClean$severity,
     method = "nnet",
     metric = "Kappa",
-    tuneLength = tuneLength,
     trControl = trControl
   )
 
@@ -94,7 +90,6 @@ rpartModel <-
     y = trainClean$severity,
     method = "rpart",
     metric = "Kappa",
-    tuneLength = tuneLength,
     trControl = trControl
   )
 
@@ -104,7 +99,6 @@ glmModel <-
     y = trainClean$severity,
     method = "glm",
     metric = "ROC",
-    tuneLength = tuneLength,
     trControl = trControl
   )
 
@@ -123,7 +117,6 @@ knnModel <-
     y = trainClean$severity,
     method = "knn",
     metric = "Kappa",
-    tuneLength = tuneLength,
     trControl = trControl
   )
 
